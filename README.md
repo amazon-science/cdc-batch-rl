@@ -17,15 +17,17 @@ year={2021},
 python main.py --env_name halfcheetah-random-v0
 
 ```
-'env_name' can be antmaze-umaze-v0, antmaze-umaze-diverse-v0, antmaze-medium-play-v0, antmaze-medium-diverse-v0,antmaze-large-play-v0,antmaze-large-diverse-v0, pen-human-v0,hammer-human-v0, door-human-v0,relocate-human-v0, pen-cloned-v0,hammer-cloned-v0, halfcheetah-random-v0,hopper-random-v0,walker2d-random-v0, door-cloned-v0, relocate-cloned-v0, kitchen-complete-v0, kitchen-partial-v0,kitchen-mixed-v0, halfcheetah-medium-v0, walker2d-medium-v0,hopper-medium-v0, halfcheetah-expert-v0, hopper-expert-v0, walker2d-expert-v0, halfcheetah-medium-expert-v0, walker2d-medium-expert-v0, hopper-medium-expert-v0, halfcheetah-medium-replay-v0, walker2d-medium-replay-v0, and hopper-medium-replay-v0. The code works on both GPU and CPU machines. Most of the hyperparameters are included in the main.py and params_info.py and also you can refer to the paper appendix for a complete list of hyperparameters.
+'env_name' can be antmaze-umaze-v0, antmaze-umaze-diverse-v0, antmaze-medium-play-v0, antmaze-medium-diverse-v0,antmaze-large-play-v0,antmaze-large-diverse-v0, pen-human-v0,hammer-human-v0, door-human-v0,relocate-human-v0, pen-cloned-v0,hammer-cloned-v0, halfcheetah-random-v0,hopper-random-v0,walker2d-random-v0, door-cloned-v0, relocate-cloned-v0, kitchen-complete-v0, kitchen-partial-v0,kitchen-mixed-v0, halfcheetah-medium-v0, walker2d-medium-v0,hopper-medium-v0, halfcheetah-expert-v0, hopper-expert-v0, walker2d-expert-v0, halfcheetah-medium-expert-v0, walker2d-medium-expert-v0, hopper-medium-expert-v0, halfcheetah-medium-replay-v0, walker2d-medium-replay-v0, and hopper-medium-replay-v0. The code works on both GPU and CPU machines. Most of the hyperparameters are included in the main.py and ./misc/params_info.py and also you can refer to the paper appendix for a complete list of hyperparameters.
 
-In order to run this code, you will need to install Pytorch, Gym, [D4RL](https://github.com/rail-berkeley/d4rl) and MuJoCo.
+In order to run this code, you will need to install pytorch, gym, [D4RL](https://github.com/rail-berkeley/d4rl) and MuJoCo.
 
 ## New Environments
-In order to run code with a new environment, you will need to first define an entry in ./configs/pearl_envs.json. Look at ./configs/abl_envs.json as a reference. In addation, you will need to add an env's code to rlkit/env/.
+In order to run code with a new environment, you will add entries for eta_coef and lambda_coef in ./misc/params_info.py and update other hyperparameters in the main.py.
+
+## Important Note
+D4RL has been updated since publication of this paper. As a result, this code likely leads to different results from the published ones in our paper.
 
 ## License
-
 This project is licensed under the Apache-2.0 License.
 
 # Contact
