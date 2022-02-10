@@ -27,7 +27,7 @@ In order to run this code, you will need to install pytorch, gym, [D4RL](https:/
 In order to run code with a new environment, you will need to add eta_coef and lambda_coef in ./misc/params_info.py for a new environment, update other hyperparameters in the main.py, and update misc/loader_batch.py.
 
 ## Important Note
-D4RL has been updated since publication of this paper. As a result, this code likely leads to different results from the published ones in our paper.
+D4RL has been changed since publication of this paper. Thus, this code likely leads to different results from the published results in the cdc paper.
 
 ## License
 This project is licensed under the Apache-2.0 License.

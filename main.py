@@ -320,11 +320,12 @@ if __name__ == "__main__":
         #######
         update_iter += args.num_trains_per_train_loop
         episode_num += 1
-
         #######
         # run training to calculate loss, run backward, and update params
         #######
-        alg_stats = alg.train(replay_buffer = replay_buffer, iterations = int(args.num_trains_per_train_loop))
+        alg_stats = alg.train(replay_buffer = replay_buffer,
+                              iterations = int(args.num_trains_per_train_loop)
+                              )
 
         #######
         # logging
@@ -332,7 +333,6 @@ if __name__ == "__main__":
         nseconds = time.time() - tstart
         # Calculate the fps (frame per second)
         fps = int(( update_iter) / nseconds)
-
         logger.record_tabular("nupdates", update_iter)
         logger.record_tabular("fps", fps)
         logger.record_tabular("critic_loss", float(alg_stats['critic_loss']))
@@ -356,6 +356,9 @@ if __name__ == "__main__":
 
         if 'std_qs' in alg_stats:
             logger.record_tabular("std_qs", float(alg_stats['std_qs']))
+
+        if 'lg_loss' in alg_stats:
+            logger.record_tabular("lg_loss", float(alg_stats['lg_loss']))
 
         logger.dump_tabular()
 

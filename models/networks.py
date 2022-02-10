@@ -11,7 +11,7 @@ def atanh(x):
     '''
     one_plus_x = (1 + x).clamp(min=1e-6)
     one_minus_x = (1 - x).clamp(min=1e-6)
-    return 0.5*torch.log(one_plus_x/ one_minus_x)
+    return 0.5 * torch.log(one_plus_x/ one_minus_x)
 
 class ActorSAC(nn.Module):
     """
@@ -54,45 +54,13 @@ class ActorSAC(nn.Module):
         self.log_std = nn.Linear(hidden_sizes[-1], action_dim)
 
         ###
-        # Action limit for clamping: critically, assumes all dimensions share the same bound!
-        # Here are actions max/limit:
-        # 1.0 HalfCheetah-v3
-        # 1.0 Walker2d-v3
-        # 1.0 Hopper-v3
-        # 1.0 Swimmer-v3
-        # 0.4000000059604645 Humanoid-v3
-        # 1.0 Reacher-v2
-        # 1.0 InvertedDoublePendulum-v2
-        # 3.0 InvertedPendulum-v2
-        # 1.0 Ant-v3
+        # Action limit for clamping: critically,
+        # assumes all dimensions share the same bound!
         self.act_limit  = max_action
         self.LOG_STD_MAX = LOG_STD_MAX
         self.LOG_STD_MIN = LOG_STD_MIN
 
-    def get_logprob(self, s, action):
-        '''
-            get log_probs
-        '''
-        raw_actions = atanh(action) # [B, D] --> [B, D]
-        x = self.net(s)
-        mu  = self.fc_mean(x)
-        log_std  = self.log_std(x)
-        log_std = torch.clamp(log_std, self.LOG_STD_MIN, self.LOG_STD_MAX)
-        std = torch.exp(log_std)
-
-        # std and mu are [B, D]
-        cat = torch.distributions.Normal(mu, std)
-        logprobs  = cat.log_prob(raw_actions).sum(axis=-1) # sum([B, D]) ==> [B]
-        # mle_logprobs: [B]
-        logprobs -= (2*(np.log(2) - action - F.softplus(-2*action))).sum(axis=1)
-
-        # mle_logprobs: [B] ==> [B, 1]
-        logprobs = logprobs.unsqueeze(-1)
-
-        return logprobs
-
-
-    def forward(self, x, gt_actions = None, deterministic=False, with_logprob=True, with_no_squash=False, with_log_mle = False):
+    def forward(self, x, gt_actions=None, deterministic=False, with_log_mle=False):
         '''
             input (x  : B * D where B is batch size and D is input_dim
         '''
@@ -111,46 +79,25 @@ class ActorSAC(nn.Module):
         else:
             pi_action = pi_distribution.rsample()
 
-        if with_logprob:
-            # Compute logprob from Gaussian, and then apply correction for Tanh squashing.
-            # SAC paper (arXiv 1801.01290) appendix C
-            # This is a more numerically-stable equivalent to Eq 21.
-
-            # pi_action [B, num_actions], logp_pi: [B]
-            logp_pi = pi_distribution.log_prob(pi_action).sum(axis=-1)
-            # logp_pi:  [B, num_actions].sum(-1) ==> [B]
-            logp_pi -= (2*(np.log(2) - pi_action - F.softplus(-2*pi_action))).sum(axis=1)
-            # logp_pi: [B] ==> [B, 1]
-            logp_pi = logp_pi.unsqueeze(-1)
-
-        else:
-            logp_pi = None
-
         squashed_actions = self.act_limit * torch.tanh(pi_action)
 
-        if with_no_squash == False:
-            # check we need log_mle
+        if with_log_mle == True:
+            ######
+            # log pi(a|s) = log rho(u|s) - \sum^D log (1 - tanh^2(u)) # D action dimention
+            # gt_actions: [B, D]
+            #####
+            raw_actions = atanh(gt_actions) # [B, D] --> [B, D]
+            mle_logprobs  = pi_distribution.log_prob(raw_actions).sum(axis=-1) # sum([B, D]) ==> [B]
+            # mle_logprobs: [B]
+            mle_logprobs -= (2*(np.log(2) - raw_actions - F.softplus(-2*raw_actions))).sum(axis=1)
 
-            if with_log_mle == True:
-                ######
-                # log pi(a|s) = log rho(u|s) - \sum^D log (1 - tanh^2(u)) # D action dimention
-                # gt_actions: [B, D]
-                #####
-                raw_actions = atanh(gt_actions) # [B, D] --> [B, D]
-                mle_logprobs  = pi_distribution.log_prob(raw_actions).sum(axis=-1) # sum([B, D]) ==> [B]
-                # mle_logprobs: [B]
-                mle_logprobs -= (2*(np.log(2) - gt_actions - F.softplus(-2*gt_actions))).sum(axis=1)
+            # mle_logprobs: [B] ==> [B, 1]
+            mle_logprobs = mle_logprobs.unsqueeze(-1)
 
-                # mle_logprobs: [B] ==> [B, 1]
-                mle_logprobs = mle_logprobs.unsqueeze(-1)
-
-                return squashed_actions, logp_pi, mle_logprobs
-
-            else:
-                return squashed_actions, logp_pi
+            return squashed_actions, mle_logprobs
 
         else:
-            return squashed_actions, logp_pi, pi_action
+            return squashed_actions
 
 class CriticSACMulti(nn.Module):
     def __init__(self,
@@ -170,17 +117,15 @@ class CriticSACMulti(nn.Module):
         self.hidden_sizes = hidden_sizes
         self.number_of_qs = number_of_qs
 
-        self.q1 = self.create_net_layes()
-        self.q2 = self.create_net_layes()
-        if self.number_of_qs > 2:
-            self.q3 = self.create_net_layes()
-
-        if self.number_of_qs == 4:
-            self.q4 = self.create_net_layes()
+        self.qs = []
+        for i in range(self.number_of_qs):
+            fc = self.create_net_layes()
+            self.__setattr__("fc{}".format(i), fc)
+            self.qs.append(fc)
 
     def create_net_layes(self):
         '''
-            create 3 or 4 layers networks
+            create 4 layers networks
         '''
         return nn.Sequential(
                             nn.Linear(self.dim_i, self.hidden_sizes[0]),
@@ -192,47 +137,16 @@ class CriticSACMulti(nn.Module):
                             nn.Linear(self.hidden_sizes[2], 1),
                             )
 
-    def forward(self, obs, a, q_id=None):
+    def forward(self, obs, a):
         '''
-            input (x): B * D where B is batch size and D is input_dim
-            input (u): B * A where B is batch size and A is action_dim
-            pre_act_rew: B * (A + 1) where B is batch size and A + 1 is input_dim
+            obs: bsize * D where bsize is batch size and D is input_dim
+            a:   bsize * A where bsize is batch size and A is action_dim
+            returns: [number_of_qs, bsize, 1]
         '''
         xu = torch.cat([obs, a], dim =-1)
+        all_qs = []
+        for i in range(self.number_of_qs):
+            all_qs.append(self.qs[i](xu))
 
-        if q_id is None:
-            x1 = self.q1(xu)
-            # Q2
-            x2 = self.q2(xu)
-
-            if self.number_of_qs == 2:
-                # each q is [b_size, 1] ==>cat ==> [num_qs, b_size, 1]
-                all_qs = torch.cat(
-                    [x1.unsqueeze(0), x2.unsqueeze(0)], 0)
-                return all_qs
-
-            elif self.number_of_qs == 3:
-                # Q3
-                x3 = self.q3(xu)
-                all_qs = torch.cat(
-                    [x1.unsqueeze(0), x2.unsqueeze(0), x3.unsqueeze(0)], 0)
-                return all_qs
-
-            else:
-                # Q3
-                x3 = self.q3(xu)
-                # Q4
-                x4 = self.q4(xu)
-
-                all_qs = torch.cat(
-                    [x1.unsqueeze(0), x2.unsqueeze(0), x3.unsqueeze(0), x4.unsqueeze(0)], 0)
-                return all_qs
-
-        else:
-            return self.qs[q_id](xu)
-
-    def get_Qi(self, obs, a, q_id):
-        '''
-            returns values for a specific qs
-        '''
-        return self(obs, a, q_id)
+        #[[bsize, 1],..]: stack==>[number_of_qs, bsize, 1]
+        return torch.stack(all_qs, dim=0)

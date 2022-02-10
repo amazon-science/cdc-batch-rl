@@ -66,8 +66,8 @@ class CDC:
         #####
         # Optims
         #####
-        self.actor_optimizer     = optim.Adam(self.actor.parameters(), lr=p_lr)
-        self.critic_optimizer    = optim.Adam(self.critic.parameters(), lr=q_lr)
+        self.actor_optimizer  = optim.Adam(self.actor.parameters(), lr=p_lr)
+        self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=q_lr)
 
         print('-----------------------------')
         print('Optim Params')
@@ -95,7 +95,7 @@ class CDC:
             # obs [D] ==> [1, D] ==> [num_samples, D]
             state = torch.FloatTensor(obs.reshape(1, -1)).repeat(self.num_samples, 1).to(self.device)
             # action [num_samples, action_dim]
-            action, _ = self.actor(state, with_logprob=False)
+            action = self.actor(state)
             # qis [num_qs, B, 1]
             qis  = self.critic(state, action)
 
@@ -122,7 +122,7 @@ class CDC:
         obs_rep = obs.unsqueeze(1).repeat(1, self.num_samples, 1).view(bsize * self.num_samples, -1)
         with torch.no_grad():
             # get actions from current policy (pi)
-            curr_actions, _ = self.actor(obs_rep, with_logprob=False)
+            curr_actions = self.actor(obs_rep)
 
         # curr_actions [B * num_samples, action_dim]
         # obs_rep [B * num_samples, obs_dim]
@@ -157,7 +157,7 @@ class CDC:
                 next_obs_rep = torch.repeat_interleave(next_obs, self.num_samples, 0)
 
                 # get next actions using current policy
-                next_action_rep, _ = self.actor(next_obs_rep, with_logprob=False)
+                next_action_rep = self.actor(next_obs_rep)
                 every_target_Qs = self.critic_target(next_obs_rep, next_action_rep)
 
                 # we want to do max_a (min_i Q_i(a))
@@ -188,13 +188,13 @@ class CDC:
             Compute pi loss
                loss = alpha * log_pi - min_{1,2} Q(s, pi)
         '''
-        pi_action, logp_pi, lopprobs = self.actor(obs, gt_actions=actions, with_log_mle=True)
+        pi_action, lopprobs = self.actor(obs, gt_actions=actions, with_log_mle=True)
         qs_pi = self.critic(obs, pi_action)
         # q_pi  = qs_pi.min(0)[0]
         q_pi  = self.nu * qs_pi.min(0)[0] + (1. - self.nu) * qs_pi.max(0)[0]
         loss_pi = (- q_pi -  self.lambda_coef * lopprobs ).mean()
 
-        return loss_pi
+        return loss_pi, lopprobs
 
     def train(self, replay_buffer=None,
                     iterations=None,
@@ -209,8 +209,10 @@ class CDC:
         actor_loss_out = 0.0
         critic_loss_out = 0.0
         qs_loss_out = 0
+        lgprob_out = 0
 
-        # since there is a dropout in critic, make sure it is on whenever drop > 0
+        # since there is a dropout in critic and
+        # make sure it is on whenever drop > 0
         self.critic.train()
 
         for it in range(iterations):
@@ -224,7 +226,6 @@ class CDC:
             reward = torch.FloatTensor(r).to(self.device)
             mask = torch.FloatTensor(1. - d).to(self.device)
 
-
             ########
             # policy updates
             ########
@@ -233,9 +234,10 @@ class CDC:
             for p in self.critic.parameters():
                 p.requires_grad = False
 
-            actor_loss = self.compute_loss_pi(obs, action)
+            actor_loss, lgprp = self.compute_loss_pi(obs, action)
 
             actor_loss_out += actor_loss.item()
+            lgprob_out += lgprp.mean().item()
 
             self.actor_optimizer.zero_grad()
             actor_loss.backward()
@@ -279,6 +281,7 @@ class CDC:
             self.total_grad_steps += 1
 
         out = {}
+        out['lg_loss']     = -lgprob_out/iterations
         out['critic_loss'] = critic_loss_out/iterations
         out['actor_loss']  = actor_loss_out/iterations
         out['qs_loss']     = qs_loss_out/iterations
